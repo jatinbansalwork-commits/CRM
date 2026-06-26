@@ -8,15 +8,30 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function getTursoConfig() {
-  const url =
+  const url = (
     process.env.TURSO_DATABASE_URL ??
     (process.env.DATABASE_URL?.startsWith("libsql:")
       ? process.env.DATABASE_URL
-      : undefined);
+      : undefined)
+  )?.trim();
   if (!url) return null;
+
+  const authToken = (
+    process.env.TURSO_AUTH_TOKEN ??
+    process.env.LIBSQL_AUTH_TOKEN ??
+    ""
+  ).trim();
+
+  return { url, authToken };
+}
+
+export function getDbDiagnostics() {
+  const turso = getTursoConfig();
   return {
-    url,
-    authToken: process.env.TURSO_AUTH_TOKEN ?? "",
+    hasUrl: Boolean(turso?.url),
+    hasToken: Boolean(turso?.authToken),
+    configured: Boolean(turso?.url && turso?.authToken),
+    isVercel: Boolean(process.env.VERCEL),
   };
 }
 
