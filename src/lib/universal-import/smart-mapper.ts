@@ -3,6 +3,7 @@ import { scoreColumn } from "@/lib/parsers/column-inference";
 import {
   suggestColumnMapping,
   suggestColumnMappingFromData,
+  sanitizeColumnMapping,
 } from "@/lib/services/import/column-mapping";
 import type { DetectedColumn } from "./types";
 
@@ -20,6 +21,7 @@ export function buildColumnDetections(
   mapping: ColumnMapping,
 ): DetectedColumn[] {
   const fromHeaders = suggestColumnMapping(headers);
+  const seenFields = new Set<keyof ImportRow>();
 
   return headers
     .filter((header) => mapping[header])
@@ -35,6 +37,11 @@ export function buildColumnDetections(
         confidence: Math.round((headerMatch ? Math.max(confidence, 0.85) : confidence) * 100) / 100,
         source: headerMatch ? ("header" as const) : ("content" as const),
       };
+    })
+    .filter((detection) => {
+      if (seenFields.has(detection.field)) return false;
+      seenFields.add(detection.field);
+      return true;
     });
 }
 
@@ -55,14 +62,13 @@ export function smartMapColumns(
 ): { mapping: ColumnMapping; detections: DetectedColumn[]; confidence: number } {
   const fromData = suggestColumnMappingFromData(headers, rows);
   const fromMemory = loadMatchingPattern(headers);
-  const mapping: ColumnMapping = { ...fromData };
+  let mapping: ColumnMapping = { ...fromData };
 
   if (fromMemory) {
-    for (const header of headers) {
-      const memField = fromMemory[header];
-      if (memField) mapping[header] = memField;
-    }
+    mapping = { ...mapping, ...fromMemory };
   }
+
+  mapping = sanitizeColumnMapping(headers, rows, mapping);
 
   const detections = buildColumnDetections(headers, rows, mapping).map((d) => ({
     ...d,

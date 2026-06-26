@@ -22,8 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Upload, FileSpreadsheet, Clipboard, Mail, Sheet } from "lucide-react";
-import { combineSheets } from "@/lib/parsers/file-provider";
+import { Upload, FileSpreadsheet, Clipboard, Mail, Sheet, CheckCircle2, PartyPopper } from "lucide-react";
+import { combineSheetsToContacts } from "@/lib/parsers/file-provider";
 import {
   mergeColumnMapping,
   hasEmailColumnMapped,
@@ -48,7 +48,7 @@ import { useRouter } from "next/navigation";
 import { Checkbox } from "@/components/ui/checkbox";
 import { StepProgress } from "@/components/shared/step-progress";
 import { IMPORT_STEPS } from "@/lib/ux-principles";
-import { CheckCircle2, PartyPopper } from "lucide-react";
+import { fetchJson } from "@/lib/fetch-json";
 
 type Step = "input" | "preview" | "mapping" | "summary";
 
@@ -160,7 +160,7 @@ export function ImportWizard() {
       return;
     }
 
-    const { headers: nextHeaders, rows: nextRows } = combineSheets(
+    const { headers: nextHeaders, rows: nextRows } = combineSheetsToContacts(
       workbookSheets,
       nextSelected,
     );
@@ -191,6 +191,14 @@ export function ImportWizard() {
     setImportDebugLog([]);
 
     try {
+      const health = await fetch("/api/health").then((r) => r.json()).catch(() => null);
+      if (!health?.ok) {
+        throw new Error(
+          health?.error ??
+            "Database not connected. On Vercel, set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN.",
+        );
+      }
+
       saveMappingPattern(headers, mapping);
 
       const result = await runChunkedImport({

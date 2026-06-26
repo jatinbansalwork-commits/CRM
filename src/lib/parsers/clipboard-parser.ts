@@ -257,6 +257,20 @@ function dropRowNumberColumn(grid: string[][]): string[][] {
   return grid.map((row) => row.slice(1));
 }
 
+function dropTrailingIndexColumn(grid: string[][]): string[][] {
+  if (grid.length === 0 || (grid[0]?.length ?? 0) < 2) return grid;
+
+  const dataRows = grid.slice(1);
+  const lastIdx = (grid[0]?.length ?? 1) - 1;
+  const lastCol = dataRows.map((r) => r[lastIdx] ?? "");
+
+  if (isRowNumberColumn(lastCol)) {
+    return grid.map((row) => row.slice(0, -1));
+  }
+
+  return grid;
+}
+
 function padRows(grid: string[][]): string[][] {
   const width = Math.max(...grid.map((r) => r.length), 0);
   return grid.map((row) => {
@@ -277,6 +291,7 @@ export function parseClipboardText(text: string): ParsedClipboard {
 
   grid = trimEmptyEdgeColumns(padRows(grid));
   grid = dropRowNumberColumn(grid);
+  grid = dropTrailingIndexColumn(grid);
 
   if (grid.length === 0) {
     return {

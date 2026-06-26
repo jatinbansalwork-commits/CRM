@@ -1,6 +1,7 @@
-import { parseWorkbook, combineSheets } from "@/lib/parsers/file-provider";
+import { parseWorkbook, combineSheetsToContacts } from "@/lib/parsers/file-provider";
 import { smartMapColumns, buildColumnDetections, computeMappingConfidence } from "./smart-mapper";
 import { analyzeQuality, expandRowsWithMultipleEmails } from "./quality-analyzer";
+import { filterImportableContactRows } from "@/lib/services/import/column-mapping";
 import { normalizeRowRecord } from "./normalize";
 import { ALL_PARSERS } from "./parsers";
 import { extractTableRegion } from "./messy-sheet";
@@ -28,7 +29,12 @@ function candidateToAnalysis(
   extra: Partial<ImportAnalysis> = {},
 ): ImportAnalysis {
   const expanded = expandRowsWithMultipleEmails(best.rows, best.mapping);
-  const quality = analyzeQuality(expanded, best.mapping, best.rowsIgnored ?? 0);
+  const { rows: importable, filtered } = filterImportableContactRows(expanded);
+  const quality = analyzeQuality(
+    importable,
+    best.mapping,
+    (best.rowsIgnored ?? 0) + filtered,
+  );
 
   return {
     parserId: best.parserId,
@@ -37,7 +43,7 @@ function candidateToAnalysis(
     sheetType: best.sheetType,
     orientation: best.orientation,
     headers: best.headers,
-    rows: expanded,
+    rows: importable,
     mapping: best.mapping,
     columnDetections: best.columnDetections,
     quality,
@@ -89,12 +95,13 @@ export async function runFileOrchestrator(
   const selectedNames = (nonEmpty.length > 0 ? nonEmpty : sheets).map(
     (s) => s.sheetName,
   );
-  const { headers, rows } = combineSheets(sheets, selectedNames);
+  const { headers, rows } = combineSheetsToContacts(sheets, selectedNames);
   const normalized = rows.map(normalizeRowRecord);
 
   const { mapping, detections } = smartMapColumns(headers, normalized);
   const expanded = expandRowsWithMultipleEmails(normalized, mapping);
-  const quality = analyzeQuality(expanded, mapping);
+  const { rows: importable, filtered } = filterImportableContactRows(expanded);
+  const quality = analyzeQuality(importable, mapping, filtered);
   const confidence = computeMappingConfidence(detections);
 
   const hasEmail = Object.values(mapping).includes("email");
@@ -118,7 +125,7 @@ export async function runFileOrchestrator(
     sheetType: "workbook",
     orientation: "vertical-table",
     headers,
-    rows: expanded,
+    rows: importable,
     mapping,
     columnDetections: detections,
     quality,
@@ -156,8 +163,13 @@ export function reanalyzeWithMapping(
   mapping: ImportAnalysis["mapping"],
 ): ImportAnalysis {
   const expanded = expandRowsWithMultipleEmails(analysis.rows, mapping);
-  const detections = buildColumnDetections(analysis.headers, analysis.rows, mapping);
-  const quality = analyzeQuality(expanded, mapping, analysis.quality.rowsIgnored);
+  const { rows: importable, filtered } = filterImportableContactRows(expanded);
+  const detections = buildColumnDetections(analysis.headers, importable, mapping);
+  const quality = analyzeQuality(
+    importable,
+    mapping,
+    analysis.quality.rowsIgnored + filtered,
+  );
   const confidence = computeMappingConfidence(detections);
 
   return {
@@ -166,6 +178,6 @@ export function reanalyzeWithMapping(
     columnDetections: detections,
     confidence,
     quality,
-    rows: expanded,
+    rows: importable,
   };
 }

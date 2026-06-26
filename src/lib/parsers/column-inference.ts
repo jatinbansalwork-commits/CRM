@@ -146,6 +146,7 @@ export function looksLikeHeaderRow(row: string[]): boolean {
 
   if (keywordHits >= 2) return true;
   if (keywordHits >= 1 && emailHits === 0) return true;
+  if (/^(hr\s*)?(name|email|company)/i.test(cells.join(" ")) && keywordHits >= 1) return true;
 
   const typed = cells.map((cell) => scoreColumn([cell]).type);
   const headerLike = typed.filter((t) => t === "unknown").length;

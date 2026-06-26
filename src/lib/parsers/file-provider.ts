@@ -1,6 +1,9 @@
 import * as XLSX from "xlsx";
 import type { ParsedImportData, ParsedSheetData } from "@/types";
 import type { ImportProvider } from "./types";
+import { combineSheetsToContacts } from "./workbook-normalizer";
+
+export { combineSheetsToContacts };
 
 const SOURCE_SHEET_KEY = "__sourceSheet";
 
@@ -86,7 +89,7 @@ export class FileProvider implements ImportProvider {
     const nonEmpty = sheets.filter((s) => s.rowCount > 0);
     const defaultSheets = nonEmpty.length > 0 ? nonEmpty : sheets;
     const selectedNames = defaultSheets.map((s) => s.sheetName);
-    const { headers, rows } = combineSheets(sheets, selectedNames);
+    const { headers, rows } = combineSheetsToContacts(sheets, selectedNames);
     const primary = defaultSheets[0];
 
     return {

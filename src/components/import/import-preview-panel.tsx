@@ -72,7 +72,6 @@ export function ImportPreviewPanel({ analysis }: Props) {
             <QualityStat label="Total rows" value={quality.totalRows} />
             <QualityStat label="Valid contacts" value={quality.validContacts} good />
             <QualityStat label="Duplicate emails" value={quality.duplicateEmails} warn={quality.duplicateEmails > 0} />
-            <QualityStat label="Missing email" value={quality.missingEmail} warn={quality.missingEmail > 0} />
             <QualityStat label="Missing company" value={quality.missingCompany} />
             <QualityStat
               label="Companies inferred"
