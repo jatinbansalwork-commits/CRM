@@ -1,3 +1,5 @@
+import { IMPORT_BATCH_SIZE } from "@/lib/constants/import";
+
 export type ImportApiSuccess = {
   success: true;
   importId: string;
@@ -30,7 +32,7 @@ export type ImportApiFailure = {
 
 export type ImportApiResponse = ImportApiSuccess | ImportApiFailure;
 
-export const IMPORT_BATCH_SIZE = 500;
+export { IMPORT_BATCH_SIZE };
 
 export function slimRowsForPayload(
   rows: Record<string, string>[],
@@ -70,8 +72,14 @@ export async function parseJsonResponse<T = ImportApiResponse>(
   }
 
   if (!contentType.includes("application/json") && !text.trimStart().startsWith("{")) {
+    const isTimeout =
+      res.status === 504 ||
+      text.includes("FUNCTION_INVOCATION_TIMEOUT") ||
+      text.includes("An error occurred with your deployment");
     throw new Error(
-      `Unexpected response type (HTTP ${res.status}): ${text.slice(0, 200)}`,
+      isTimeout
+        ? `Import timed out on the server (HTTP ${res.status}). Importing in smaller batches — retry and it should continue.`
+        : `Unexpected response type (HTTP ${res.status}): ${text.slice(0, 200)}`,
     );
   }
 

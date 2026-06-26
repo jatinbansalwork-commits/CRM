@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { contactRepository } from "@/lib/repositories";
 import { exportService } from "@/lib/services/export/export-service";
-import type { ContactWithCompany } from "@/types";
+import type { ContactFilters, ContactWithCompany } from "@/types";
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -14,11 +14,9 @@ export async function POST(request: Request) {
       if (c) contacts.push(c);
     }
   } else {
-    const result = await contactRepository.findMany({
-      take: 10000,
-      filters: body.filters,
-    });
-    contacts = result.items;
+    contacts = await contactRepository.findAllForExport(
+      body.filters as ContactFilters | undefined,
+    );
   }
 
   if (format === "xlsx") {

@@ -88,14 +88,47 @@ export class ContactRepository implements IContactRepository {
 
     const total = contactIds
       ? contactIds.length
-      : params.take && params.take <= 100
-        ? undefined
-        : await prisma.contact.count({ where });
+      : await prisma.contact.count({ where });
 
     const orderBy: Record<string, string> = {};
     const sortBy = params.sortBy ?? "updatedAt";
+    const sortOrder = params.sortOrder ?? "desc";
+
+    if (sortBy === "company") {
+      const items = await prisma.contact.findMany({
+        where,
+        take: take + 1,
+        ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
+        orderBy: [
+          { company: { name: sortOrder } },
+          { name: "asc" },
+          { email: "asc" },
+        ],
+        include: contactInclude,
+      });
+
+      if (contactIds) {
+        const rank = new Map(contactIds.map((id, index) => [id, index]));
+        items.sort(
+          (a, b) => (rank.get(a.id) ?? 9999) - (rank.get(b.id) ?? 9999),
+        );
+      }
+
+      let nextCursor: string | null = null;
+      if (items.length > take) {
+        const next = items.pop();
+        nextCursor = next?.id ?? null;
+      }
+
+      return {
+        items: items as ContactWithCompany[],
+        nextCursor,
+        total,
+      };
+    }
+
     if (!contactIds) {
-      orderBy[sortBy] = params.sortOrder ?? "desc";
+      orderBy[sortBy] = sortOrder;
     }
 
     const items = await prisma.contact.findMany({
@@ -122,8 +155,25 @@ export class ContactRepository implements IContactRepository {
     return {
       items: items as ContactWithCompany[],
       nextCursor,
-      total: total ?? items.length,
+      total,
     };
+  }
+
+  /** Full export — sorted by company, then name, then email. */
+  async findAllForExport(
+    filters?: ContactListParams["filters"],
+  ): Promise<ContactWithCompany[]> {
+    const where = buildWhere(filters);
+    const items = await prisma.contact.findMany({
+      where,
+      orderBy: [
+        { company: { name: "asc" } },
+        { name: "asc" },
+        { email: "asc" },
+      ],
+      include: contactInclude,
+    });
+    return items as ContactWithCompany[];
   }
 
   async findById(id: string): Promise<ContactWithCompany | null> {

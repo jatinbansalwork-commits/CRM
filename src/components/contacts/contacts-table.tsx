@@ -34,10 +34,14 @@ import { BulkActionBar } from "./bulk-action-bar";
 import { Search, Download, Plus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useContactsListSearch } from "@/hooks/use-contact-search";
+import { useCursorPagination } from "@/hooks/use-cursor-pagination";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { EmptyState } from "@/components/shared/empty-state";
 import { SearchFeedback } from "@/components/shared/search-feedback";
 import { ApiError } from "@/components/shared/api-error";
+import { TablePagination } from "@/components/shared/table-pagination";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 
 const statusColors: Record<ContactStatus, string> = {
   NOT_CONTACTED: "bg-muted text-text-subtle",
@@ -52,12 +56,21 @@ const statusColors: Record<ContactStatus, string> = {
 export function ContactsTable() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const queryClient = useQueryClient();
+  const debouncedSearch = useDebouncedValue(search);
+  const isSearching = search !== debouncedSearch;
 
-  const { data, isLoading, isFetching, isError, error, refetch, isSearching, debouncedSearch } =
-    useContactsListSearch(search, statusFilter, 100);
+  const { page, cursor, hasPrev, goNext, goPrev } = useCursorPagination([
+    debouncedSearch,
+    statusFilter,
+    pageSize,
+  ]);
+
+  const { data, isLoading, isFetching, isError, error, refetch } =
+    useContactsListSearch(search, statusFilter, { take: pageSize, cursor });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
@@ -276,40 +289,57 @@ export function ContactsTable() {
           action={{ label: "Import contacts", href: "/import" }}
         />
       ) : (
-        <div className="max-h-[calc(100vh-280px)] overflow-auto rounded-md border border-border bg-surface shadow-ads-raised">
-          <table className="w-full caption-bottom text-sm">
-            <TableHeader className="sticky top-0 z-10 bg-background">
-              {table.getHeaderGroups().map((hg) => (
-                <TableRow key={hg.id}>
-                  {hg.headers.map((header) => (
-                    <TableHead key={header.id} style={{ width: header.getSize() }}>
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() ? "selected" : undefined}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </table>
+        <div className="overflow-hidden rounded-md border border-border bg-surface shadow-ads-raised">
+          <div className="max-h-[calc(100vh-340px)] overflow-auto">
+            <table className="w-full caption-bottom text-sm">
+              <TableHeader className="sticky top-0 z-10 bg-background">
+                {table.getHeaderGroups().map((hg) => (
+                  <TableRow key={hg.id}>
+                    {hg.headers.map((header) => (
+                      <TableHead key={header.id} style={{ width: header.getSize() }}>
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() ? "selected" : undefined}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </table>
+          </div>
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            total={data?.total ?? contacts.length}
+            itemCount={contacts.length}
+            hasPrev={hasPrev}
+            hasNext={Boolean(data?.nextCursor)}
+            onPrev={() => {
+              goPrev();
+              setRowSelection({});
+            }}
+            onNext={() => {
+              goNext(data?.nextCursor);
+              setRowSelection({});
+            }}
+            onPageSizeChange={setPageSize}
+            loading={isFetching}
+            label="contacts"
+          />
         </div>
       )}
-
-      <p className="text-sm text-text-subtle" role="status">
-        Showing {contacts.length} of {data?.total ?? 0} contacts
-      </p>
 
       <ContactSheet contactId={selectedId} onClose={() => setSelectedId(null)} />
     </div>
