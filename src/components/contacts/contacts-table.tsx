@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useRef, useState, useCallback } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   useReactTable,
   getCoreRowModel,
@@ -21,14 +20,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { STATUS_LABELS, CONTACT_STATUSES, PRIORITIES, PRIORITY_LABELS } from "@/lib/constants";
+import { STATUS_LABELS, CONTACT_STATUSES, PRIORITY_LABELS } from "@/lib/constants";
 import type { ContactWithCompany } from "@/types";
 import type { ContactStatus } from "@/lib/constants";
 import { ContactSheet } from "./contact-sheet";
@@ -38,6 +36,8 @@ import { toast } from "sonner";
 import { useContactsListSearch } from "@/hooks/use-contact-search";
 import { EmptyState } from "@/components/shared/empty-state";
 import { SearchFeedback } from "@/components/shared/search-feedback";
+import { ApiError } from "@/components/shared/api-error";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const statusColors: Record<ContactStatus, string> = {
   NOT_CONTACTED: "bg-muted text-text-subtle",
@@ -54,10 +54,9 @@ export function ContactsTable() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
-  const parentRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
-  const { data, isLoading, isFetching, isSearching, debouncedSearch } =
+  const { data, isLoading, isFetching, isError, error, refetch, isSearching, debouncedSearch } =
     useContactsListSearch(search, statusFilter, 100);
 
   const updateMutation = useMutation({
@@ -66,12 +65,18 @@ export function ContactsTable() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-      }).then((r) => r.json()),
+      }).then((r) => {
+        if (!r.ok) throw new Error("Update failed");
+        return r.json();
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
       toast.success("Contact updated");
     },
   });
+
+  const updateRef = useRef(updateMutation.mutate);
+  updateRef.current = updateMutation.mutate;
 
   const contacts: ContactWithCompany[] = data?.items ?? [];
 
@@ -98,6 +103,7 @@ export function ContactsTable() {
         header: "Name",
         cell: ({ row }) => (
           <button
+            type="button"
             className="text-left font-medium hover:underline"
             onClick={() => setSelectedId(row.original.id)}
           >
@@ -111,30 +117,20 @@ export function ContactsTable() {
         header: "Company",
         cell: ({ row }) => row.original.company?.name ?? "—",
       },
-      { accessorKey: "role", header: "Role", cell: ({ getValue }) => getValue() ?? "—" },
+      {
+        accessorKey: "role",
+        header: "Role",
+        cell: ({ getValue }) => getValue() ?? "—",
+      },
       {
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => (
-          <Select
-            value={row.original.status}
-            onValueChange={(v) =>
-              updateMutation.mutate({ id: row.original.id, data: { status: v } })
-            }
-          >
-            <SelectTrigger className="h-7 w-32 border-0 bg-transparent">
-              <Badge variant="secondary" className={statusColors[row.original.status]}>
-                {STATUS_LABELS[row.original.status]}
-              </Badge>
-            </SelectTrigger>
-            <SelectContent>
-              {CONTACT_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {STATUS_LABELS[s]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <button type="button" onClick={() => setSelectedId(row.original.id)}>
+            <Badge variant="secondary" className={statusColors[row.original.status]}>
+              {STATUS_LABELS[row.original.status]}
+            </Badge>
+          </button>
         ),
       },
       {
@@ -149,7 +145,7 @@ export function ContactsTable() {
           <Checkbox
             checked={row.original.emailed}
             onCheckedChange={(v) =>
-              updateMutation.mutate({ id: row.original.id, data: { emailed: !!v } })
+              updateRef.current({ id: row.original.id, data: { emailed: !!v } })
             }
           />
         ),
@@ -162,7 +158,7 @@ export function ContactsTable() {
           <Checkbox
             checked={row.original.followupSent}
             onCheckedChange={(v) =>
-              updateMutation.mutate({ id: row.original.id, data: { followupSent: !!v } })
+              updateRef.current({ id: row.original.id, data: { followupSent: !!v } })
             }
           />
         ),
@@ -175,14 +171,14 @@ export function ContactsTable() {
           <Checkbox
             checked={row.original.linkedinSent}
             onCheckedChange={(v) =>
-              updateMutation.mutate({ id: row.original.id, data: { linkedinSent: !!v } })
+              updateRef.current({ id: row.original.id, data: { linkedinSent: !!v } })
             }
           />
         ),
         size: 40,
       },
     ],
-    [updateMutation],
+    [],
   );
 
   const table = useReactTable({
@@ -195,14 +191,6 @@ export function ContactsTable() {
   });
 
   const rows = table.getRowModel().rows;
-
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 48,
-    overscan: 10,
-  });
-
   const selectedIds = Object.keys(rowSelection).filter((k) => rowSelection[k]);
 
   const handleExport = useCallback(async () => {
@@ -211,12 +199,17 @@ export function ContactsTable() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids: selectedIds.length ? selectedIds : undefined, format: "csv" }),
     });
+    if (!res.ok) {
+      toast.error("Export failed");
+      return;
+    }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = "contacts.csv";
     a.click();
+    URL.revokeObjectURL(url);
   }, [selectedIds]);
 
   return (
@@ -254,99 +247,71 @@ export function ContactsTable() {
           Add
         </Button>
       </div>
+
       <SearchFeedback
         searching={isSearching || (isFetching && !!debouncedSearch)}
         resultCount={debouncedSearch ? data?.total : undefined}
       />
 
       {selectedIds.length > 0 && (
-        <BulkActionBar
-          selectedIds={selectedIds}
-          onClear={() => setRowSelection({})}
-        />
+        <BulkActionBar selectedIds={selectedIds} onClear={() => setRowSelection({})} />
       )}
 
-      {!isLoading && contacts.length === 0 && !data?.total ? (
+      {isError ? (
+        <ApiError
+          message={error instanceof Error ? error.message : "Failed to load contacts"}
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
+        <div className="space-y-2 rounded-md border border-border bg-surface p-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full" />
+          ))}
+        </div>
+      ) : contacts.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="No contacts yet"
+          title={debouncedSearch ? "No contacts match your search" : "No contacts yet"}
           description="Import your spreadsheet or paste emails to build your outreach list."
           action={{ label: "Import contacts", href: "/import" }}
-          secondaryAction={{ label: "Add manually", href: "/contacts" }}
         />
       ) : (
-      <div ref={parentRef} className="h-[calc(100vh-280px)] overflow-auto rounded-md border border-border bg-surface shadow-ads-raised">
-        <Table>
-          <TableHeader className="sticky top-0 z-10 bg-background">
-            {table.getHeaderGroups().map((hg) => (
-              <TableRow key={hg.id}>
-                {hg.headers.map((header) => (
-                  <TableHead key={header.id} style={{ width: header.getSize() }}>
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
-                  Loading...
-                </TableCell>
-              </TableRow>
-            ) : rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                  No contacts found. Import your data to get started.
-                </TableCell>
-              </TableRow>
-            ) : (
-              <>
-                {virtualizer.getVirtualItems().length > 0 && (
-                  <tr style={{ height: virtualizer.getVirtualItems()[0]?.start ?? 0 }} />
-                )}
-                {virtualizer.getVirtualItems().map((vRow) => {
-                  const row = rows[vRow.index];
-                  if (!row) return null;
-                  return (
-                    <TableRow
-                      key={row.id}
-                      data-state={row.getIsSelected() ? "selected" : undefined}
-                      className="hover:bg-muted/50"
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  );
-                })}
-                {virtualizer.getVirtualItems().length > 0 && (
-                  <tr
-                    style={{
-                      height:
-                        virtualizer.getTotalSize() -
-                        (virtualizer.getVirtualItems().at(-1)?.end ?? 0),
-                    }}
-                  />
-                )}
-              </>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+        <div className="max-h-[calc(100vh-280px)] overflow-auto rounded-md border border-border bg-surface shadow-ads-raised">
+          <table className="w-full caption-bottom text-sm">
+            <TableHeader className="sticky top-0 z-10 bg-background">
+              {table.getHeaderGroups().map((hg) => (
+                <TableRow key={hg.id}>
+                  {hg.headers.map((header) => (
+                    <TableHead key={header.id} style={{ width: header.getSize() }}>
+                      {flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() ? "selected" : undefined}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </table>
+        </div>
       )}
 
       <p className="text-sm text-text-subtle" role="status">
         Showing {contacts.length} of {data?.total ?? 0} contacts
       </p>
 
-      <ContactSheet
-        contactId={selectedId}
-        onClose={() => setSelectedId(null)}
-      />
+      <ContactSheet contactId={selectedId} onClose={() => setSelectedId(null)} />
     </div>
   );
 }

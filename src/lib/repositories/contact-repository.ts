@@ -88,7 +88,9 @@ export class ContactRepository implements IContactRepository {
 
     const total = contactIds
       ? contactIds.length
-      : await prisma.contact.count({ where });
+      : params.take && params.take <= 100
+        ? undefined
+        : await prisma.contact.count({ where });
 
     const orderBy: Record<string, string> = {};
     const sortBy = params.sortBy ?? "updatedAt";
@@ -120,7 +122,7 @@ export class ContactRepository implements IContactRepository {
     return {
       items: items as ContactWithCompany[],
       nextCursor,
-      total,
+      total: total ?? items.length,
     };
   }
 

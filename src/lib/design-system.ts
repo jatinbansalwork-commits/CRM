@@ -20,13 +20,6 @@ export const NAV_GROUPS = [
     ],
   },
   {
-    label: "Insights",
-    items: [
-      { href: "/analytics", label: "Analytics", icon: "BarChart3" as const },
-      { href: "/activity", label: "Activity", icon: "Activity" as const },
-    ],
-  },
-  {
     label: "System",
     items: [{ href: "/settings", label: "Settings", icon: "Settings" as const }],
   },

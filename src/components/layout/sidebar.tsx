@@ -7,9 +7,7 @@ import {
   Users,
   Building2,
   Upload,
-  BarChart3,
   Copy,
-  Activity,
   Settings,
   PanelLeftClose,
   PanelLeft,
@@ -25,9 +23,7 @@ const iconMap = {
   Users,
   Building2,
   Upload,
-  BarChart3,
   Copy,
-  Activity,
   Settings,
 };
 
