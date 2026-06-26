@@ -50,6 +50,32 @@ src/lib/services/ai/    — AI extension stubs for future features
 | `G` then `D` | Go to Dashboard |
 | `?` | Show shortcuts |
 
+## Deploy to Vercel (required: Turso)
+
+Vercel’s serverless runtime **cannot** use a local SQLite file (`file:./dev.db`). Use [Turso](https://turso.tech) (hosted SQLite) for production:
+
+1. Install the [Turso CLI](https://docs.turso.tech/cli) and create a database:
+   ```bash
+   turso db create outreach-crm
+   turso db show outreach-crm --url
+   turso db tokens create outreach-crm
+   ```
+
+2. Apply the schema to Turso (from your machine):
+   ```bash
+   export TURSO_DATABASE_URL="libsql://..."
+   export TURSO_AUTH_TOKEN="..."
+   npm run db:turso:migrate
+   ```
+
+3. In **Vercel → Project → Settings → Environment Variables**, add:
+   - `TURSO_DATABASE_URL` — your `libsql://...` URL
+   - `TURSO_AUTH_TOKEN` — token from step 1
+
+4. Redeploy the app.
+
+Local development still uses `DATABASE_URL=file:./dev.db` (default).
+
 ## Future: Supabase Migration
 
 1. Change `provider` in `prisma/schema.prisma` to `postgresql`

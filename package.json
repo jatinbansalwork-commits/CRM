@@ -10,6 +10,7 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force && npx tsx prisma/seed.ts",
+    "db:turso:migrate": "npx tsx scripts/apply-turso-migration.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {
@@ -18,7 +19,9 @@
   "dependencies": {
     "@base-ui/react": "^1.6.0",
     "@hookform/resolvers": "^5.4.0",
+    "@libsql/client": "^0.8.1",
     "@prisma/adapter-better-sqlite3": "^7.8.0",
+    "@prisma/adapter-libsql": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@tanstack/react-query": "^5.101.1",
     "@tanstack/react-table": "^8.21.3",
