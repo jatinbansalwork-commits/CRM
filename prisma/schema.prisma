@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum ContactStatus {
+  NOT_CONTACTED
+  CONTACTED
+  REPLIED
+  INTERVIEW
+  REJECTED
+  OFFER
+  ARCHIVED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Company {
+  id        String    @id @default(cuid())
+  name      String
+  domain    String?
+  website   String?
+  industry  String?
+  notes     String?
+  contacts  Contact[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([name])
+  @@index([domain])
+}
+
+model Contact {
+  id            String        @id @default(cuid())
+  name          String?
+  email         String        @unique
+  role          String?
+  department    String?
+  domain        String?
+  linkedin      String?
+  website       String?
+  sourceFile    String?
+  sourceSheet   String?
+  sourceRow     Int?
+  tags          String        @default("[]")
+  priority      Priority      @default(MEDIUM)
+  status        ContactStatus @default(NOT_CONTACTED)
+  emailed       Boolean       @default(false)
+  followupSent  Boolean       @default(false)
+  linkedinSent  Boolean       @default(false)
+  lastContacted DateTime?
+  nextFollowup  DateTime?
+  companyId     String?
+  company       Company?      @relation(fields: [companyId], references: [id])
+  importId      String?
+  notes         ContactNote[]
+  activities    Activity[]
+  deletedAt     DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([status])
+  @@index([domain])
+  @@index([companyId])
+  @@index([nextFollowup])
+  @@index([deletedAt])
+  @@index([importId])
+}
+
+model ContactNote {
+  id        String   @id @default(cuid())
+  contactId String
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([contactId])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  action    String
+  metadata  String   @default("{}")
+  timestamp DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([action])
+  @@index([contactId])
+}
+
+model Import {
+  id         String   @id @default(cuid())
+  filename   String?
+  source     String
+  imported   Int      @default(0)
+  duplicates Int      @default(0)
+  updated    Int      @default(0)
+  skipped    Int      @default(0)
+  metadata   String   @default("{}")
+  timestamp  DateTime @default(now())
+}
+
+model AppSetting {
+  key   String @id
+  value String
+}
